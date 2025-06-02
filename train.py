@@ -1,5 +1,7 @@
 import pandas as pd
 import skops.io as sio
+import os
+
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
@@ -51,6 +53,9 @@ f1 = f1_score(y_test, predictions, average="macro")
 
 print("Accuracy:", str(round(accuracy, 2) * 100) + "%", "F1:", round(f1, 2))
 
+# Create empty directories for results
+os.makedirs("./Results", exist_ok=True)
+os.makedirs("./Model", exist_ok=True)
 
 ## Confusion Matrix Plot
 import matplotlib.pyplot as plt

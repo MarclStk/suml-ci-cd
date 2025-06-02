@@ -1,70 +1,74 @@
-import pandas as pd
+import gradio as gr
 import skops.io as sio
-from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.impute import SimpleImputer
-from sklearn.metrics import accuracy_score, f1_score
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OrdinalEncoder, StandardScaler
+import warnings
+from sklearn.exceptions import InconsistentVersionWarning
 
-## Loading the Data
-drug_df = pd.read_csv("Data/drug.csv")
-drug_df = drug_df.sample(frac=1)
+# Suppress the version warnings
+warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
-## Train Test Split
-from sklearn.model_selection import train_test_split
-
-X = drug_df.drop("Drug", axis=1).values
-y = drug_df.Drug.values
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=125
-)
-
-
-## Pipeline
-cat_col = [1,2,3]
-num_col = [0,4]
-
-transform = ColumnTransformer(
-    [
-        ("encoder", OrdinalEncoder(), cat_col),
-        ("num_imputer", SimpleImputer(strategy="median"), num_col),
-        ("num_scaler", StandardScaler(), num_col),
-    ]
-)
-pipe = Pipeline(
-    steps=[
-        ("preprocessing", transform),
-        ("model", RandomForestClassifier(n_estimators=10, random_state=125)),
-    ]
-)
-
-## Training
-pipe.fit(X_train, y_train)
+# Explicitly specify trusted types
+trusted_types = [
+    "sklearn.pipeline.Pipeline",
+    "sklearn.preprocessing.OneHotEncoder",
+    "sklearn.preprocessing.StandardScaler",
+    "sklearn.compose.ColumnTransformer",
+    "sklearn.preprocessing.OrdinalEncoder",
+    "sklearn.impute.SimpleImputer",
+    "sklearn.tree.DecisionTreeClassifier",
+    "sklearn.ensemble.RandomForestClassifier",
+    "numpy.dtype",
+]
+pipe = sio.load("./Model/drug_pipeline.skops", trusted=trusted_types)
 
 
-## Model Evaluation
-predictions = pipe.predict(X_test)
-accuracy = accuracy_score(y_test, predictions)
-f1 = f1_score(y_test, predictions, average="macro")
+def predict_drug(age, sex, blood_pressure, cholesterol, na_to_k_ratio):
+    """Predict drugs based on patient features.
 
-print("Accuracy:", str(round(accuracy, 2) * 100) + "%", "F1:", round(f1, 2))
+    Args:
+        age (int): Age of patient
+        sex (str): Sex of patient
+        blood_pressure (str): Blood pressure level
+        cholesterol (str): Cholesterol level
+        na_to_k_ratio (float): Ratio of sodium to potassium in blood
+
+    Returns:
+        str: Predicted drug label
+    """
+    features = [age, sex, blood_pressure, cholesterol, na_to_k_ratio]
+    predicted_drug = pipe.predict([features])[0]
+
+    label = f"Predicted Drug: {predicted_drug}"
+    return label
 
 
-## Confusion Matrix Plot
-import matplotlib.pyplot as plt
-from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+inputs = [
+    gr.Slider(15, 74, step=1, label="Age"),
+    gr.Radio(["M", "F"], label="Sex"),
+    gr.Radio(["HIGH", "LOW", "NORMAL"], label="Blood Pressure"),
+    gr.Radio(["HIGH", "NORMAL"], label="Cholesterol"),
+    gr.Slider(6.2, 38.2, step=0.1, label="Na_to_K"),
+]
+outputs = [gr.Label(num_top_classes=5)]
 
-predictions = pipe.predict(X_test)
-cm = confusion_matrix(y_test, predictions, labels=pipe.classes_)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=pipe.classes_)
-disp.plot()
-plt.savefig("./Results/model_results.png", dpi=120)
+examples = [
+    [30, "M", "HIGH", "NORMAL", 15.4],
+    [35, "F", "LOW", "NORMAL", 8],
+    [50, "M", "HIGH", "HIGH", 34],
+]
 
-## Write metrics to file
-with open("./Results/metrics.txt", "w") as outfile:
-    outfile.write(f"\nAccuracy = {round(accuracy, 2)}, F1 Score = {round(f1, 2)}")
 
-## Saving the model file
-sio.dump(pipe, "./Model/drug_pipeline.skops")
+title = "Drug Classification"
+description = "Enter the details to correctly identify Drug type?"
+article = "This app is a part of the **[Beginner's Guide to CI/CD for Machine Learning](https://www.datacamp.com/tutorial/ci-cd-for-machine-learning)**. It teaches how to automate training, evaluation, and deployment of models to Hugging Face using GitHub Actions."
+
+
+gr.Interface(
+    fn=predict_drug,
+    inputs=inputs,
+    outputs=outputs,
+    examples=examples,
+    title=title,
+    description=description,
+    article=article,
+    theme=gr.themes.Soft(),
+).launch()

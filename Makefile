@@ -5,6 +5,9 @@ install:
 format:
 	black *.py
 
+prepare-dirs:
+	mkdir -p Results Model
+
 train:
 	python train.py
 
